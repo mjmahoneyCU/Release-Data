@@ -5,127 +5,377 @@ import matplotlib.pyplot as plt
 from scipy.stats import linregress
 
 # --- CONFIG ---
-st.set_page_config(page_title="Biotech Release Curve Analysis", layout="wide")
-st.title("Standard Curve & Release Curve Analysis Tool")
+st.set_page_config(page_title="Buffs Biotech: Release Curve Analyzer", layout="wide")
 
-st.markdown(r"""
-Welcome to the Release Analysis Tool! This app will help you:
-1. Build a **standard curve** from known concentrations and their absorbance.
-2. Use your standard curve to calculate the concentration of **unknown release samples**.
-3. Construct a **cumulative release curve** to visualize your experiment's results.
+# --- BRANDED HEADER & STYLING ---
+st.markdown("""
+<style>
+.block-container {
+    padding-top: 2rem;
+}
+.cu-header {
+    background: linear-gradient(135deg, #000000 0%, #1a1a1a 100%);
+    border-left: 6px solid #CFB87C;
+    padding: 1.5rem 2rem;
+    margin-bottom: 2rem;
+    border-radius: 4px;
+}
+.cu-header h1 {
+    color: #CFB87C;
+    margin: 0;
+    font-family: 'Helvetica Neue', Arial, sans-serif;
+    font-weight: 600;
+    font-size: 1.8rem;
+}
+.cu-header p {
+    color: #ffffff;
+    margin: 0.25rem 0 0 0;
+    opacity: 0.85;
+    font-size: 1rem;
+}
+h2, h3 {
+    color: #1a1a1a;
+    border-bottom: 2px solid #CFB87C;
+    padding-bottom: 0.25rem;
+}
+.stButton > button {
+    background-color: #CFB87C;
+    color: #000000;
+    border: none;
+    font-weight: 600;
+}
+.stButton > button:hover {
+    background-color: #b8a269;
+    color: #000000;
+}
+</style>
+
+<div class='cu-header'>
+    <h1>Buffs Biotech: Release Curve Analyzer</h1>
+    <p>CU Science Discovery · Engineering Biology with Polymers</p>
+</div>
+""", unsafe_allow_html=True)
+
+
+# --- STEP 1: STANDARD CURVE EQUATION ---
+st.header("Step 1: Enter Your Standard Curve Equation")
+
+st.markdown("""
+Your standard curve from Monday gives you the equation to convert absorbance into concentration. Enter the slope and y-intercept from your Standard Curve Tool here.
 """)
+
+with st.expander("Where do I find these numbers?", expanded=False):
+    st.markdown("""
+Look at the Step 3 results in your **Standard Curve Tool** (the app you used Monday). You'll see three metric cards: **Slope (m)**, **Y-intercept (b)**, and **R²**. Copy the values into the boxes below.
+
+The equation your curve gave you is:
+""")
+    st.latex(r"A = m \times C + b")
+    st.markdown("""
+The app will use this equation to convert each of your absorbance readings into a concentration:
+""")
+    st.latex(r"C = \frac{A - b}{m}")
+
+curve_cols = st.columns(2)
+slope = curve_cols[0].number_input(
+    "Slope (m)",
+    value=0.001,
+    format="%.5f",
+    step=0.0001,
+    help="From Monday's Standard Curve Tool. Should be a small positive number (roughly 0.0001 to 0.01)."
+)
+intercept = curve_cols[1].number_input(
+    "Y-intercept (b)",
+    value=0.0,
+    format="%.4f",
+    step=0.001,
+    help="From Monday's Standard Curve Tool. Should be a small number near zero."
+)
+
+if slope <= 0:
+    st.error("Slope must be positive. Check your Standard Curve Tool results.")
+    st.stop()
 
 st.markdown("---")
 
-# --- SECTION 1: STANDARD CURVE ---
-st.header("📈 Step 1: Build Your Standard Curve")
-st.markdown(r"""
-Enter the known concentrations of your standards and their corresponding absorbance values below.
 
-### What is a Standard Curve?
-A standard curve is a line that shows the relationship between how much substance is in your sample (concentration) and how much light it absorbs (absorbance).
+# --- STEP 2: EXPERIMENT TYPE ---
+st.header("Step 2: Choose Your Experiment Type")
 
-**Standard Curve Equation:**
-$$A = m \times C + b$$
-Where:
-- \( A \) is Absorbance (AU)
-- \( C \) is Concentration (\mu g/mL)
-- \( m \) is the slope of the line
-- \( b \) is the y-intercept
+experiment_type = st.radio(
+    "Which experiment are you analyzing?",
+    [
+        "Tuesday — Franz Cell (sample returned to receptor; receptor volume stays constant)",
+        "Wednesday — Patch Mimic (patch moves to fresh compartment each time point)"
+    ],
+    key="experiment_type"
+)
+
+is_tuesday = experiment_type.startswith("Tuesday")
+
+with st.expander("Why does this matter?", expanded=False):
+    st.markdown("""
+The math for cumulative release depends on how you sampled.
+
+**Tuesday (Franz cell):** You sampled 1 mL, measured absorbance, then returned the sample to the receptor. The receptor volume stays constant, so the concentration you measure at each time point directly reflects how much dye has accumulated in the receptor since t = 0. Cumulative release = concentration × receptor volume.
+
+**Wednesday (Patch mimic):** The patch moved to a fresh water compartment at each time point. Each measurement represents release during that single interval, not the total. Cumulative release = sum of (concentration × compartment volume) across all intervals.
 """)
 
-with st.expander("Enter your Standard Curve Data", expanded=True):
-    df_std = pd.DataFrame({
-        "Concentration (µg/mL)": [0.00, 10.00, 25.00, 50.00, 100.00, 200.00],
-        "Absorbance (AU)": [0.00, 0.05, 0.12, 0.25, 0.50, 1.00]
-    })
-    edited_std_df = st.data_editor(df_std, num_rows="dynamic", key="std_editor")
-
-x_std = pd.to_numeric(edited_std_df["Concentration (µg/mL)"], errors='coerce').dropna().values
-y_std = pd.to_numeric(edited_std_df["Absorbance (AU)"], errors='coerce').dropna().values
-
-if len(x_std) >= 2:
-    slope, intercept, r_value, _, _ = linregress(x_std, y_std)
-    st.success(f"**Standard Curve Equation:** A = {slope:.4f} × C + {intercept:.4f}")
-    st.info(f"R-squared = {r_value**2:.4f}.")
-    fig_std, ax_std = plt.subplots(figsize=(8, 4))
-    ax_std.plot(x_std, y_std, 'o', label='Data')
-    ax_std.plot(x_std, slope * x_std + intercept, 'r-', label='Fit')
-    ax_std.set_xlabel("Concentration (µg/mL)")
-    ax_std.set_ylabel("Absorbance (AU)")
-    ax_std.set_title("Standard Curve")
-    ax_std.legend()
-    st.pyplot(fig_std)
-else:
-    st.warning("Please enter at least two valid data points to create the standard curve.")
-    slope, intercept = 1.0, 0.0
+volume_label = "Receptor volume (mL)" if is_tuesday else "Compartment volume (mL)"
+default_volume = 30.0 if is_tuesday else 60.0
+sample_volume = st.number_input(
+    volume_label,
+    value=default_volume,
+    min_value=1.0,
+    step=1.0,
+    help=f"The volume of water in each {'Franz cell receptor' if is_tuesday else 'patch compartment'}. Check your protocol."
+)
 
 st.markdown("---")
 
-# --- SECTION 2: MULTI-SAMPLE RELEASE ANALYSIS ---
-st.header("🧪 Step 2: Analyze Your Release Samples")
 
-num_samples = st.selectbox("How many samples would you like to analyze?", list(range(1, 10)), index=2)
+# --- STEP 3: SAMPLE SETUP ---
+st.header("Step 3: Set Up Your Samples")
+
+num_samples = st.selectbox(
+    "How many samples (chambers) are you analyzing?",
+    list(range(1, 7)),
+    index=5  # default to 6
+)
+
+st.markdown(f"Enter each sample's name and time-absorbance data below. Leave unused time rows blank.")
+
+all_samples = []
+
 sample_tabs = st.tabs([f"Sample {i+1}" for i in range(num_samples)])
 
-all_cumulative = []
-
-for i in range(num_samples):
-    with sample_tabs[i]:
-        st.subheader(f"Sample {i+1} Release Data")
-        df_release = pd.DataFrame({
-            "Time (h)": [0, 1, 2, 4, 8, 12, 24],
-            "Absorbance (AU)": [0.00]*7
-        })
-        df_edit = st.data_editor(df_release, key=f"release_{i}", num_rows="dynamic")
-
-        # Convert to concentrations
-        concs = (pd.to_numeric(df_edit["Absorbance (AU)"], errors='coerce') - intercept) / slope
-        concs = concs.apply(lambda x: max(0.0, x))
-
-        sample_volume = 25
-        amount_released = concs * sample_volume
-        cumulative_release = amount_released.cumsum()
-
-        result_df = pd.DataFrame({
-            "Time (h)": df_edit["Time (h)"],
-            "Absorbance (AU)": df_edit["Absorbance (AU)"],
-            "Concentration (µg/mL)": concs,
-            "Amount Released (µg)": amount_released,
-            "Cumulative Release (µg)": cumulative_release
-        })
-
-        st.dataframe(result_df.set_index("Time (h)"))
-        all_cumulative.append((f"Sample {i+1}", result_df))
-
-        csv = result_df.to_csv(index=False).encode('utf-8')
-        st.download_button(
-            f"Download Sample {i+1} Data as CSV",
-            csv,
-            file_name=f"sample_{i+1}_release.csv",
-            mime='text/csv'
+for i, tab in enumerate(sample_tabs):
+    with tab:
+        sample_name = st.text_input(
+            "Sample name (from your experimental design):",
+            value=f"Chamber {i+1}",
+            key=f"name_{i}"
         )
 
+        df_data = pd.DataFrame({
+            "Time (min)": [np.nan] * 15,
+            "Absorbance": [np.nan] * 15
+        })
+
+        edited = st.data_editor(
+            df_data,
+            num_rows="dynamic",
+            key=f"data_{i}",
+            use_container_width=True
+        )
+
+        # Clean data
+        edited["Time (min)"] = pd.to_numeric(edited["Time (min)"], errors='coerce')
+        edited["Absorbance"] = pd.to_numeric(edited["Absorbance"], errors='coerce')
+        clean = edited.dropna(subset=["Time (min)", "Absorbance"]).sort_values("Time (min)").reset_index(drop=True)
+
+        if len(clean) == 0:
+            st.info("Enter time and absorbance values above to see your release curve.")
+            all_samples.append({"name": sample_name, "data": None})
+            continue
+
+        # Calculate concentration
+        clean["Concentration (µg/mL)"] = ((clean["Absorbance"] - intercept) / slope).clip(lower=0)
+
+        # Calculate cumulative release based on experiment type
+        if is_tuesday:
+            # Concentration in receptor reflects accumulated dye directly
+            clean["Cumulative release (µg)"] = clean["Concentration (µg/mL)"] * sample_volume
+        else:
+            # Each point is release during an interval; sum them
+            clean["Interval release (µg)"] = clean["Concentration (µg/mL)"] * sample_volume
+            clean["Cumulative release (µg)"] = clean["Interval release (µg)"].cumsum()
+
+        st.dataframe(clean.round(3), use_container_width=True, hide_index=True)
+
+        all_samples.append({"name": sample_name, "data": clean})
+
 st.markdown("---")
 
-# --- COMPARATIVE PLOT ---
-st.subheader("📈 Comparative Plot: Cumulative Release")
-if len(all_cumulative) > 1:
-    fig, ax = plt.subplots(figsize=(10, 6))
-    for label, df in all_cumulative:
-        ax.plot(df["Time (h)"], df["Cumulative Release (µg)"], marker='o', label=label)
-    ax.set_xlabel("Time (hours)")
-    ax.set_ylabel("Cumulative Release (µg)")
-    ax.set_title("Comparison of Cumulative Release Curves")
-    ax.legend()
-    ax.grid(True)
+
+# --- STEP 4: COMPARATIVE PLOT ---
+valid_samples = [s for s in all_samples if s["data"] is not None and len(s["data"]) > 1]
+
+if len(valid_samples) == 0:
+    st.info("Enter data for at least one sample to see the release curve.")
+    st.stop()
+
+st.header("Step 4: Compare Your Release Curves")
+
+colors = ["#4A90E2", "#CFB87C", "#D62728", "#2CA02C", "#9467BD", "#8C564B"]
+
+fig, ax = plt.subplots(figsize=(10, 5))
+for i, sample in enumerate(valid_samples):
+    df = sample["data"]
+    ax.plot(df["Time (min)"], df["Cumulative release (µg)"],
+            marker='o', linewidth=2, markersize=6,
+            color=colors[i % len(colors)], label=sample["name"])
+
+ax.set_xlabel("Time (min)", fontsize=11)
+ax.set_ylabel("Cumulative release (µg)", fontsize=11)
+ax.grid(True, linestyle=':', alpha=0.4)
+ax.legend(loc='best', fontsize=9, framealpha=0.95)
+ax.spines['top'].set_visible(False)
+ax.spines['right'].set_visible(False)
+st.pyplot(fig)
+plt.close(fig)
+
+
+# --- STEP 5: RELEASE RATE ANALYSIS ---
+st.header("Step 5: Calculate Release Rate")
+
+st.markdown("""
+Every release curve typically has three phases:
+
+- **Lag phase** — flat or slow release at the start, while the drug loads into the membrane
+- **Steady-state release** — linear climb, the drug is moving through at a constant rate
+- **Depletion or saturation** — flattening at the end, the reservoir is running out or the receptor is saturating
+
+The **release rate** (µg/min) is the slope of the steady-state portion of the curve. For each sample, pick the time window where your curve looks most linear.
+""")
+
+rate_results = []
+
+for i, sample in enumerate(valid_samples):
+    df = sample["data"]
+    st.subheader(sample["name"])
+
+    times = df["Time (min)"].values
+    cum_release = df["Cumulative release (µg)"].values
+
+    if len(times) < 3:
+        st.info("Need at least 3 time points to fit a release rate.")
+        continue
+
+    time_options = sorted(times.tolist())
+
+    rate_cols = st.columns(2)
+    start_time = rate_cols[0].selectbox(
+        "Start of steady-state (min):",
+        options=time_options,
+        index=0,
+        key=f"rate_start_{i}"
+    )
+    end_time = rate_cols[1].selectbox(
+        "End of steady-state (min):",
+        options=time_options,
+        index=len(time_options) - 1,
+        key=f"rate_end_{i}"
+    )
+
+    if end_time <= start_time:
+        st.warning("End time must be after start time.")
+        continue
+
+    mask = (times >= start_time) & (times <= end_time)
+    x_fit = times[mask]
+    y_fit = cum_release[mask]
+
+    if len(x_fit) < 2:
+        st.warning("Select a window with at least 2 time points.")
+        continue
+
+    m, b, r, _, _ = linregress(x_fit, y_fit)
+    r_squared = r ** 2
+
+    metric_cols = st.columns(3)
+    metric_cols[0].metric("Release rate", f"{m:.2f} µg/min")
+    metric_cols[1].metric("R² of fit", f"{r_squared:.3f}")
+    metric_cols[2].metric("Window", f"{int(start_time)}–{int(end_time)} min")
+
+    if r_squared < 0.9:
+        st.warning(f"R² = {r_squared:.3f} is low. Your selected window may not be in steady-state. Try narrowing the window.")
+    else:
+        st.success(f"R² = {r_squared:.3f} — clean linear fit. The release rate for this window is reliable.")
+
+    # Plot this sample with fit overlay
+    fig, ax = plt.subplots(figsize=(8, 4))
+    ax.plot(times, cum_release, 'o-', color=colors[i % len(colors)],
+            markersize=6, linewidth=1.5, alpha=0.5, label='All data')
+    ax.plot(x_fit, y_fit, 'o', color=colors[i % len(colors)],
+            markersize=9, label='Steady-state window')
+    fit_line_x = np.array([start_time, end_time])
+    fit_line_y = m * fit_line_x + b
+    ax.plot(fit_line_x, fit_line_y, '--', color='#000000', linewidth=2,
+            label=f'Fit: {m:.2f} µg/min')
+    ax.set_xlabel("Time (min)")
+    ax.set_ylabel("Cumulative release (µg)")
+    ax.set_title(sample["name"])
+    ax.legend(loc='best', fontsize=9)
+    ax.grid(True, linestyle=':', alpha=0.4)
+    ax.spines['top'].set_visible(False)
+    ax.spines['right'].set_visible(False)
     st.pyplot(fig)
+    plt.close(fig)
 
-# --- REFLECTION ---
+    rate_results.append({
+        "Sample": sample["name"],
+        "Release rate (µg/min)": round(m, 2),
+        "R²": round(r_squared, 3),
+        "Window start (min)": int(start_time),
+        "Window end (min)": int(end_time)
+    })
+
+    st.markdown("---")
+
+
+# --- STEP 6: COMPARISON SUMMARY ---
+if len(rate_results) > 0:
+    st.header("Step 6: Compare Release Rates Across Samples")
+
+    summary_df = pd.DataFrame(rate_results)
+    st.dataframe(summary_df, use_container_width=True, hide_index=True)
+
+    if len(rate_results) > 1:
+        # Identify fastest and slowest
+        sorted_rates = sorted(rate_results, key=lambda x: x["Release rate (µg/min)"], reverse=True)
+        fastest = sorted_rates[0]
+        slowest = sorted_rates[-1]
+
+        rate_ratio = fastest["Release rate (µg/min)"] / slowest["Release rate (µg/min)"] if slowest["Release rate (µg/min)"] > 0 else float('inf')
+
+        st.markdown(f"""
+- **Fastest release:** {fastest['Sample']} at **{fastest['Release rate (µg/min)']} µg/min**
+- **Slowest release:** {slowest['Sample']} at **{slowest['Release rate (µg/min)']} µg/min**
+- **Ratio:** Fastest is **{rate_ratio:.1f}×** faster than slowest
+""")
+
+        if rate_ratio > 2:
+            st.info("Release rates differ by more than 2×. The design changes you made had a significant effect on how fast the 'drug' crosses the membrane.")
+
+
+# --- STEP 7: DOWNLOAD ---
 st.markdown("---")
-st.header("🧠 Reflection")
-st.text_area("1. What did you learn from comparing the release profiles?")
-st.text_area("2. What do differences between samples suggest about release behavior?")
-st.text_area("3. What steps could you take to improve the consistency or control the rate of release?")
+st.subheader("Download Your Results")
 
-st.success("Great job analyzing your multiple release samples!")
+def generate_csv():
+    lines = []
+    lines.append(f"Release Curve Analysis")
+    lines.append(f"Experiment type: {'Tuesday Franz Cell' if is_tuesday else 'Wednesday Patch Mimic'}")
+    lines.append(f"Standard curve: A = {slope} * C + {intercept}")
+    lines.append(f"{'Receptor' if is_tuesday else 'Compartment'} volume: {sample_volume} mL")
+    lines.append("")
+
+    for sample in valid_samples:
+        lines.append(f"Sample: {sample['name']}")
+        lines.append(sample["data"].round(3).to_csv(index=False))
+        lines.append("")
+
+    if len(rate_results) > 0:
+        lines.append("Release Rate Summary:")
+        lines.append(pd.DataFrame(rate_results).to_csv(index=False))
+
+    return "\n".join(lines).encode("utf-8")
+
+st.download_button(
+    label="Download all data as CSV",
+    data=generate_csv(),
+    file_name="release_curve_analysis.csv",
+    mime="text/csv"
+)
