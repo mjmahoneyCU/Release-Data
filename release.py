@@ -5,33 +5,13 @@ import matplotlib.pyplot as plt
 from scipy.stats import linregress
 
 # --- CONFIG ---
-st.set_page_config(page_title="Buffs Biotech: Release Curve Analyzer", layout="wide")
+st.set_page_config(page_title="Release Curve Analyzer", layout="wide")
 
-# --- BRANDED HEADER & STYLING ---
+# --- STYLING ---
 st.markdown("""
 <style>
 .block-container {
     padding-top: 2rem;
-}
-.cu-header {
-    background: linear-gradient(135deg, #000000 0%, #1a1a1a 100%);
-    border-left: 6px solid #CFB87C;
-    padding: 1.5rem 2rem;
-    margin-bottom: 2rem;
-    border-radius: 4px;
-}
-.cu-header h1 {
-    color: #CFB87C;
-    margin: 0;
-    font-family: 'Helvetica Neue', Arial, sans-serif;
-    font-weight: 600;
-    font-size: 1.8rem;
-}
-.cu-header p {
-    color: #ffffff;
-    margin: 0.25rem 0 0 0;
-    opacity: 0.85;
-    font-size: 1rem;
 }
 h2, h3 {
     color: #1a1a1a;
@@ -49,12 +29,23 @@ h2, h3 {
     color: #000000;
 }
 </style>
-
-<div class='cu-header'>
-    <h1>Buffs Biotech: Release Curve Analyzer</h1>
-    <p>CU Science Discovery · Engineering Biology with Polymers</p>
-</div>
 """, unsafe_allow_html=True)
+
+# --- DEPARTMENT BANNER ---
+import base64
+with open("CBEN.png", "rb") as _banner_file:
+    _banner_b64 = base64.b64encode(_banner_file.read()).decode()
+st.markdown(
+    f"""
+    <div style="background-color: #000000; padding: 0.5rem 1.5rem; margin-bottom: 1rem; border-radius: 4px;">
+        <img src="data:image/png;base64,{_banner_b64}" style="height: 80px; display: block;" />
+    </div>
+    """,
+    unsafe_allow_html=True,
+)
+
+# --- PAGE TITLE ---
+st.title("Release Curve Analyzer")
 
 
 # --- STEP 1: STANDARD CURVE EQUATION ---
