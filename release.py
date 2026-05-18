@@ -132,11 +132,11 @@ st.header("Step 3: Set Up Your Samples")
 num_samples = st.selectbox(
     "How many samples (chambers) are you analyzing?",
     list(range(1, 7)),
-    index=5  # default to 6
+    index=3  # default to 4
 )
 
 st.markdown("""
-For each sample, enter a **descriptive name**, then fill in the time, absorbance, and dilution factor at each time point. Leave unused rows blank.
+First, give each chamber a **descriptive name**. These names will appear as the legend on your release curve plot.
 """)
 
 # Legend guidance — medium
@@ -155,6 +155,21 @@ The names you enter here will become the **legend** on your comparative release 
 A reader should be able to look at your plot and the legend and immediately understand what's being compared, without needing to read your notes.
 """)
 
+# Chamber name inputs — compact row of text boxes
+st.markdown("**Chamber names:**")
+name_cols = st.columns(num_samples)
+sample_names = []
+for i, col in enumerate(name_cols):
+    name = col.text_input(
+        f"Chamber {i+1}",
+        value=f"Chamber {i+1}",
+        key=f"name_{i}",
+        label_visibility="visible",
+    )
+    sample_names.append(name)
+
+st.markdown("---")
+
 # Dilution guidance
 with st.expander("💧 What is the dilution factor? (And why does it matter?)", expanded=False):
     st.markdown("""
@@ -170,81 +185,93 @@ The absorbance you measure on the diluted sample is **half** what was actually i
 - **4** = 1 part sample + 3 parts water
 - **10** = 1 part sample + 9 parts water
 
-The dilution factor often changes during an experiment — early time points may not need dilution, but as the receptor fills up you'll switch to 2×, then 4×. **Enter the dilution factor for each time point in the table.**
+The dilution factor often changes during an experiment — early time points may not need dilution, but as the receptor fills up you'll switch to 2×, then 4×. **Enter the dilution factor for each time point in the table below.**
 """)
 
+st.markdown("""
+Now enter your time points, dilution factors, and absorbance readings for each chamber in the table below. Leave unused rows blank.
+""")
+
+# Build the consolidated data editor
+n_rows = 20
+base_cols = {
+    "Time (min)": [np.nan] * n_rows,
+    "Dilution factor": [2.0] * n_rows,
+}
+for name in sample_names:
+    base_cols[f"A: {name}"] = [np.nan] * n_rows
+
+shared_df = pd.DataFrame(base_cols)
+
+# Column configs
+col_config = {
+    "Time (min)": st.column_config.NumberColumn(
+        "Time (min)",
+        help="Time point in minutes since the start of the experiment.",
+        format="%.1f",
+    ),
+    "Dilution factor": st.column_config.NumberColumn(
+        "Dilution factor",
+        help="How many times the sample was diluted. 1 = no dilution, 2 = 1:1 with water, 4 = 1:3 with water.",
+        min_value=1.0,
+        format="%.1f",
+        default=2.0,
+    ),
+}
+for name in sample_names:
+    col_config[f"A: {name}"] = st.column_config.NumberColumn(
+        f"A: {name}",
+        help=f"Spectrophotometer absorbance reading for {name} (on the diluted sample if dilution > 1).",
+        format="%.3f",
+    )
+
+edited = st.data_editor(
+    shared_df,
+    num_rows="dynamic",
+    key="shared_data",
+    use_container_width=True,
+    column_config=col_config,
+)
+
+# Numeric coercion
+edited["Time (min)"] = pd.to_numeric(edited["Time (min)"], errors='coerce')
+edited["Dilution factor"] = pd.to_numeric(edited["Dilution factor"], errors='coerce').fillna(1.0)
+for name in sample_names:
+    edited[f"A: {name}"] = pd.to_numeric(edited[f"A: {name}"], errors='coerce')
+
+# Drop rows with no time
+shared_clean = edited.dropna(subset=["Time (min)"]).sort_values("Time (min)").reset_index(drop=True)
+
+# Build per-sample dataframes
 all_samples = []
+for name in sample_names:
+    abs_col = f"A: {name}"
+    sub = shared_clean[["Time (min)", "Dilution factor", abs_col]].copy()
+    sub = sub.rename(columns={abs_col: "Absorbance"})
+    sub = sub.dropna(subset=["Absorbance"]).reset_index(drop=True)
 
-sample_tabs = st.tabs([f"Sample {i+1}" for i in range(num_samples)])
+    if len(sub) == 0:
+        all_samples.append({"name": name, "data": None})
+        continue
 
-for i, tab in enumerate(sample_tabs):
-    with tab:
-        sample_name = st.text_input(
-            "Sample name (this will appear in your plot legend):",
-            value=f"Chamber {i+1}",
-            key=f"name_{i}",
-            help="Use a name that describes what's different about this chamber — e.g., '8 µm pore, no coating' rather than just 'Chamber 1'."
-        )
+    sub["Measured C (µg/mL)"] = ((sub["Absorbance"] - intercept) / slope).clip(lower=0)
+    sub["Receptor C (µg/mL)"] = sub["Measured C (µg/mL)"] * sub["Dilution factor"]
 
-        df_data = pd.DataFrame({
-            "Time (min)": [np.nan] * 15,
-            "Absorbance": [np.nan] * 15,
-            "Dilution factor": [2.0] * 15,
-        })
+    if is_tuesday:
+        sub["Cumulative release (µg)"] = sub["Receptor C (µg/mL)"] * sample_volume
+    else:
+        sub["Interval release (µg)"] = sub["Receptor C (µg/mL)"] * sample_volume
+        sub["Cumulative release (µg)"] = sub["Interval release (µg)"].cumsum()
 
-        edited = st.data_editor(
-            df_data,
-            num_rows="dynamic",
-            key=f"data_{i}",
-            use_container_width=True,
-            column_config={
-                "Time (min)": st.column_config.NumberColumn(
-                    "Time (min)",
-                    help="Time point in minutes since the start of the experiment.",
-                    format="%.1f",
-                ),
-                "Absorbance": st.column_config.NumberColumn(
-                    "Absorbance",
-                    help="The reading from the spectrophotometer (on the diluted sample if dilution > 1).",
-                    format="%.3f",
-                ),
-                "Dilution factor": st.column_config.NumberColumn(
-                    "Dilution factor",
-                    help="How many times the sample was diluted. 1 = no dilution, 2 = 1:1 with water, 4 = 1:3 with water, etc.",
-                    min_value=1.0,
-                    format="%.1f",
-                    default=2.0,
-                ),
-            },
-        )
+    all_samples.append({"name": name, "data": sub})
 
-        # Clean data
-        edited["Time (min)"] = pd.to_numeric(edited["Time (min)"], errors='coerce')
-        edited["Absorbance"] = pd.to_numeric(edited["Absorbance"], errors='coerce')
-        edited["Dilution factor"] = pd.to_numeric(edited["Dilution factor"], errors='coerce').fillna(1.0)
-        clean = edited.dropna(subset=["Time (min)", "Absorbance"]).sort_values("Time (min)").reset_index(drop=True)
-
-        if len(clean) == 0:
-            st.info("Enter time, absorbance, and dilution values above to see your release curve.")
-            all_samples.append({"name": sample_name, "data": None})
+# Show calculated tables per chamber
+with st.expander("Show calculated values for each chamber", expanded=False):
+    for s in all_samples:
+        if s["data"] is None:
             continue
-
-        # Calculate measured concentration from absorbance, then apply dilution to get receptor concentration
-        clean["Measured C (µg/mL)"] = ((clean["Absorbance"] - intercept) / slope).clip(lower=0)
-        clean["Receptor C (µg/mL)"] = clean["Measured C (µg/mL)"] * clean["Dilution factor"]
-
-        # Calculate cumulative release based on experiment type
-        if is_tuesday:
-            # Concentration in receptor reflects accumulated dye directly
-            clean["Cumulative release (µg)"] = clean["Receptor C (µg/mL)"] * sample_volume
-        else:
-            # Each point is release during an interval; sum them
-            clean["Interval release (µg)"] = clean["Receptor C (µg/mL)"] * sample_volume
-            clean["Cumulative release (µg)"] = clean["Interval release (µg)"].cumsum()
-
-        st.dataframe(clean.round(3), use_container_width=True, hide_index=True)
-
-        all_samples.append({"name": sample_name, "data": clean})
+        st.markdown(f"**{s['name']}**")
+        st.dataframe(s["data"].round(3), use_container_width=True, hide_index=True)
 
 st.markdown("---")
 
@@ -253,13 +280,13 @@ st.markdown("---")
 valid_samples = [s for s in all_samples if s["data"] is not None and len(s["data"]) > 1]
 
 if len(valid_samples) == 0:
-    st.info("Enter data for at least one sample to see the release curve.")
+    st.info("Enter time, dilution, and absorbance data for at least one chamber to see the release curve.")
     st.stop()
 
 st.header("Step 4: Compare Your Release Curves")
 
 st.markdown("""
-The legend on the plot below uses the **sample names you entered in Step 3**. Make sure each name describes what's experimentally different about that chamber — if the legend just says "Chamber 1, Chamber 2, Chamber 3," go back and rename them.
+The legend on the plot below uses the **chamber names you entered in Step 3**. Make sure each name describes what's experimentally different about that chamber — if the legend just says "Chamber 1, Chamber 2, Chamber 3," go back and rename them.
 """)
 
 colors = ["#4A90E2", "#CFB87C", "#D62728", "#2CA02C", "#9467BD", "#8C564B"]
