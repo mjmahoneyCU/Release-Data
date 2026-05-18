@@ -114,7 +114,7 @@ The math for cumulative release depends on how you sampled.
 """)
 
 volume_label = "Receptor volume (mL)" if is_tuesday else "Compartment volume (mL)"
-default_volume = 30.0 if is_tuesday else 60.0
+default_volume = 113.0 if is_tuesday else 60.0
 sample_volume = st.number_input(
     volume_label,
     value=default_volume,
@@ -219,16 +219,12 @@ plt.close(fig)
 
 
 # --- STEP 5: RELEASE RATE ANALYSIS ---
-st.header("Step 5: Calculate Release Rate")
+st.header("Step 5: Calculate Your Maximum Release Rate")
 
 st.markdown("""
-Every release curve typically has three phases:
+In **worksheet question 3b**, you identified the **maximum release region** of your curve — the steep, early portion (after startup) where the patch is releasing at its fastest. Enter that window below and the app will fit a line to it and report the release rate in µg/min.
 
-- **Lag phase** — flat or slow release at the start, while the drug loads into the membrane
-- **Steady-state release** — linear climb, the drug is moving through at a constant rate
-- **Depletion or saturation** — flattening at the end, the reservoir is running out or the receptor is saturating
-
-The **release rate** (µg/min) is the slope of the steady-state portion of the curve. For each sample, pick the time window where your curve looks most linear.
+> **A note on R²:** R² tells you how linear your selected window is — not whether you picked the right window. A tight fit over the wrong region still gives a precise answer to the wrong question. Trust the conceptual work you did on the worksheet.
 """)
 
 rate_results = []
@@ -248,13 +244,13 @@ for i, sample in enumerate(valid_samples):
 
     rate_cols = st.columns(2)
     start_time = rate_cols[0].selectbox(
-        "Start of steady-state (min):",
+        "Start of maximum release region (min):",
         options=time_options,
         index=0,
         key=f"rate_start_{i}"
     )
     end_time = rate_cols[1].selectbox(
-        "End of steady-state (min):",
+        "End of maximum release region (min):",
         options=time_options,
         index=len(time_options) - 1,
         key=f"rate_end_{i}"
@@ -276,21 +272,16 @@ for i, sample in enumerate(valid_samples):
     r_squared = r ** 2
 
     metric_cols = st.columns(3)
-    metric_cols[0].metric("Release rate", f"{m:.2f} µg/min")
+    metric_cols[0].metric("Maximum release rate", f"{m:.2f} µg/min")
     metric_cols[1].metric("R² of fit", f"{r_squared:.3f}")
     metric_cols[2].metric("Window", f"{int(start_time)}–{int(end_time)} min")
-
-    if r_squared < 0.9:
-        st.warning(f"R² = {r_squared:.3f} is low. Your selected window may not be in steady-state. Try narrowing the window.")
-    else:
-        st.success(f"R² = {r_squared:.3f} — clean linear fit. The release rate for this window is reliable.")
 
     # Plot this sample with fit overlay
     fig, ax = plt.subplots(figsize=(8, 4))
     ax.plot(times, cum_release, 'o-', color=colors[i % len(colors)],
             markersize=6, linewidth=1.5, alpha=0.5, label='All data')
     ax.plot(x_fit, y_fit, 'o', color=colors[i % len(colors)],
-            markersize=9, label='Steady-state window')
+            markersize=9, label='Selected window')
     fit_line_x = np.array([start_time, end_time])
     fit_line_y = m * fit_line_x + b
     ax.plot(fit_line_x, fit_line_y, '--', color='#000000', linewidth=2,
@@ -307,7 +298,7 @@ for i, sample in enumerate(valid_samples):
 
     rate_results.append({
         "Sample": sample["name"],
-        "Release rate (µg/min)": round(m, 2),
+        "Max release rate (µg/min)": round(m, 2),
         "R²": round(r_squared, 3),
         "Window start (min)": int(start_time),
         "Window end (min)": int(end_time)
@@ -325,15 +316,15 @@ if len(rate_results) > 0:
 
     if len(rate_results) > 1:
         # Identify fastest and slowest
-        sorted_rates = sorted(rate_results, key=lambda x: x["Release rate (µg/min)"], reverse=True)
+        sorted_rates = sorted(rate_results, key=lambda x: x["Max release rate (µg/min)"], reverse=True)
         fastest = sorted_rates[0]
         slowest = sorted_rates[-1]
 
-        rate_ratio = fastest["Release rate (µg/min)"] / slowest["Release rate (µg/min)"] if slowest["Release rate (µg/min)"] > 0 else float('inf')
+        rate_ratio = fastest["Max release rate (µg/min)"] / slowest["Max release rate (µg/min)"] if slowest["Max release rate (µg/min)"] > 0 else float('inf')
 
         st.markdown(f"""
-- **Fastest release:** {fastest['Sample']} at **{fastest['Release rate (µg/min)']} µg/min**
-- **Slowest release:** {slowest['Sample']} at **{slowest['Release rate (µg/min)']} µg/min**
+- **Fastest release:** {fastest['Sample']} at **{fastest['Max release rate (µg/min)']} µg/min**
+- **Slowest release:** {slowest['Sample']} at **{slowest['Max release rate (µg/min)']} µg/min**
 - **Ratio:** Fastest is **{rate_ratio:.1f}×** faster than slowest
 """)
 
