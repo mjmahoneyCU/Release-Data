@@ -194,6 +194,13 @@ Now enter your time points, dilution factors, and absorbance readings for each c
 
 # Build the consolidated data editor
 n_rows = 20
+
+# Handle clear/reset requests from previous run.
+# We bump a counter that's appended to the data_editor's key, which forces
+# Streamlit to treat the widget as new and re-read its default value.
+if "data_editor_version" not in st.session_state:
+    st.session_state["data_editor_version"] = 0
+
 base_cols = {
     "Time (min)": [np.nan] * n_rows,
     "Dilution factor": [2.0] * n_rows,
@@ -228,10 +235,40 @@ for name in sample_names:
 edited = st.data_editor(
     shared_df,
     num_rows="dynamic",
-    key="shared_data",
+    key=f"shared_data_v{st.session_state['data_editor_version']}",
     use_container_width=True,
     column_config=col_config,
 )
+
+# --- Clear / Reset buttons ---
+btn_cols = st.columns([1, 1, 4])
+clear_data = btn_cols[0].button(
+    "🗑️ Clear data only",
+    help="Empty the data table but keep chamber names, standard curve, volume, and experiment type.",
+)
+reset_all = btn_cols[1].button(
+    "🔄 Reset everything",
+    help="Clear the data table AND reset chamber names, standard curve, volume, and experiment type to defaults.",
+)
+
+if clear_data or reset_all:
+    # Bumping the version forces the data_editor to remount with empty defaults
+    st.session_state["data_editor_version"] += 1
+
+    if reset_all:
+        # Clear all the other widget keys; they'll fall back to their default values
+        keys_to_clear = ["experiment_type"]
+        for i in range(6):  # max possible chambers
+            keys_to_clear.append(f"name_{i}")
+        # Also clear release-rate window selections from Step 5
+        for i in range(6):
+            keys_to_clear.append(f"rate_start_{i}")
+            keys_to_clear.append(f"rate_end_{i}")
+        for k in keys_to_clear:
+            if k in st.session_state:
+                del st.session_state[k]
+
+    st.rerun()
 
 # Numeric coercion
 edited["Time (min)"] = pd.to_numeric(edited["Time (min)"], errors='coerce')
