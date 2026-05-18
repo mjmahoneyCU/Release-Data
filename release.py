@@ -222,7 +222,7 @@ plt.close(fig)
 st.header("Step 5: Calculate Your Maximum Release Rate")
 
 st.markdown("""
-In **worksheet question 3b**, you identified the **maximum release region** of your curve — the steep, early portion (after startup) where the patch is releasing at its fastest. Enter that window below and the app will fit a line to it and report the release rate in µg/min.
+In worksheet question 3b, you identified the maximum release region of your curve — the steep, early portion (after startup) where the patch is releasing at its fastest. Enter that window below and the app will fit a line to it and report the release rate in µg/min.
 
 > **A note on R²:** R² tells you how linear your selected window is — not whether you picked the right window. A tight fit over the wrong region still gives a precise answer, but to the wrong question. Trust the conceptual work you did on the worksheet.
 """)
