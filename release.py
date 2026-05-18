@@ -108,7 +108,7 @@ with st.expander("Why does this matter?", expanded=False):
     st.markdown("""
 The math for cumulative release depends on how you sampled.
 
-**Tuesday (Franz cell):** You sampled 1 mL, measured absorbance, then returned the sample to the receptor. The receptor volume stays constant, so the concentration you measure at each time point directly reflects how much dye has accumulated in the receptor since t = 0. Cumulative release = concentration × receptor volume.
+**Tuesday (Franz cell):** You sampled 250 µL, measured absorbance, then added an equal volume to the receptor. The receptor volume stays constant, so the concentration you measure at each time point directly reflects how much dye has accumulated in the receptor since t = 0. Cumulative release = concentration × receptor volume.
 
 **Wednesday (Patch mimic):** The patch moved to a fresh water compartment at each time point. Each measurement represents release during that single interval, not the total. Cumulative release = sum of (concentration × compartment volume) across all intervals.
 """)
@@ -224,7 +224,7 @@ st.header("Step 5: Calculate Your Maximum Release Rate")
 st.markdown("""
 In **worksheet question 3b**, you identified the **maximum release region** of your curve — the steep, early portion (after startup) where the patch is releasing at its fastest. Enter that window below and the app will fit a line to it and report the release rate in µg/min.
 
-> **A note on R²:** R² tells you how linear your selected window is — not whether you picked the right window. A tight fit over the wrong region still gives a precise answer to the wrong question. Trust the conceptual work you did on the worksheet.
+> **A note on R²:** R² tells you how linear your selected window is — not whether you picked the right window. A tight fit over the wrong region still gives a precise answer, but to the wrong question. Trust the conceptual work you did on the worksheet.
 """)
 
 rate_results = []
